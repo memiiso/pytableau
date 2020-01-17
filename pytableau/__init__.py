@@ -6,10 +6,17 @@ import os
 import shutil
 import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 import tableaudocumentapi
 import tableauserverclient as TSC
+from tableauserverclient import ViewItem, WorkbookItem, DatasourceItem, ProjectItem
+
+try:
+    import PyPDF3
+except ImportError:
+    raise Exception('Please `pip install PyPDF3` to use this module')
 
 log = logging.getLogger('PyTableau')
 log.setLevel(logging.INFO)
@@ -73,7 +80,7 @@ class PyTableau(object):
             except Exception:
                 # pass this error "UnicodeEncodeError 'ascii' codec can't encode characters in position : ordinal
                 # not in range(128)"
-                log.info("Skipping workbook %s " % path)
+                log.info("Skipping workbook %s " % server_workbook.name)
         log.info("Download Completed! Download directory %s " % download_dir)
 
     def get_all_workbook_fields(self, workbooks_dir):
@@ -246,6 +253,94 @@ class PyTableau(object):
                 log.debug(str(e))
                 log.info("Refreshing '%s' failed Trying %s th time" % (ds_item.name, str(current_attempt)))
                 return self.refresh_extract(ds_item=ds_item, attempt=attempt, current_attempt=current_attempt)
+
+    def get_workbook_views(self, workbook_id):  # -> Iterable of views
+        workbook = self.server.workbooks.get_by_id(workbook_id)
+        self.server.workbooks.populate_views(workbook)
+        return workbook.views
+
+    def _download_view_pdf(self, view: ViewItem, dest_dir):  # -> Filename to downloaded pdf
+        log.info("Exporting View:%s  Id:%s" % (view.name, view.id))
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        destination_filename = "%s.pdf" % os.path.join(dest_dir, view.id)
+        self.server.views.populate_pdf(view)
+        with open(destination_filename, 'wb') as f:
+            f.write(view.pdf)
+
+        return destination_filename
+
+    def download_workbook_pdf(self, workbook: WorkbookItem, dest_dir):
+        self.server.workbooks.populate_views(workbook)
+
+        _pdf_merger = PyPDF3.PdfFileMerger()
+        _is_pdf_content_generated = False
+        for _view in workbook.views:
+            _downloaded_wv = self._download_view_pdf(_view, dest_dir=os.path.join(dest_dir, 'views'))
+            _pdf_merger.append(_downloaded_wv)
+            _is_pdf_content_generated = True
+        if _is_pdf_content_generated:
+            _pdf_merger.write(os.path.join(dest_dir, workbook.name) + ".pdf")
+            _pdf_merger.close()
+        else:
+            raise Exception("No Pdf Content Generated")
+
+        print(workbook.id)
+
+    def _get_request_option(self, name=None, project_name=None, tag=None) -> TSC.RequestOptions:
+        req_option = TSC.RequestOptions()
+        if name is not None:
+            req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Name,
+                                             TSC.RequestOptions.Operator.Equals,
+                                             name))
+        if project_name is not None:
+            req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.ProjectName,
+                                             TSC.RequestOptions.Operator.Equals,
+                                             project_name))
+        if tag is not None:
+            req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Tags,
+                                             TSC.RequestOptions.Operator.Equals,
+                                             tag))
+        return req_option
+
+    def get_workbook_by_name(self, name, project_name=None, tag=None) -> WorkbookItem:
+        req_option = self._get_request_option(name=name, project_name=project_name, tag=tag)
+        all_items, pagination_item = self.server.workbooks.get(req_options=req_option)
+        if not all_items:
+            raise LookupError("Workbook with given parameters was not found.")
+        if len(all_items) > 1:
+            raise LookupError("Found multiple Workbooks with given parameters.")
+
+        return all_items.pop()
+
+    def get_workbooks_by_tag(self, tag, project_name=None) -> [WorkbookItem]:
+        req_option = self._get_request_option(tag=tag, project_name=project_name)
+        all_items, pagination_item = self.server.workbooks.get(req_options=req_option)
+        if not all_items:
+            raise LookupError("Workbook with given parameters was not found.")
+
+        return all_items
+
+    def get_datasource_by_name(self, name, project_name=None, tag=None) -> DatasourceItem:
+        req_option = self._get_request_option(name=name, project_name=project_name, tag=tag)
+
+        all_items, pagination_item = self.server.datasources.get(req_options=req_option)
+        if not all_items:
+            raise LookupError("Datasource with given parameters was not found.")
+        if len(all_items) > 1:
+            raise LookupError("Found multiple Datasources with given parameters.")
+
+        return all_items.pop()
+
+    def get_project_by_name(self, name, parant_project_name=None, tag=None) -> ProjectItem:
+        req_option = self._get_request_option(name=name, project_name=parant_project_name, tag=tag)
+
+        all_items, pagination_item = self.server.datasources.get(req_options=req_option)
+        if not all_items:
+            raise LookupError("Project with given parameters was not found.")
+        if len(all_items) > 1:
+            raise LookupError("Found multiple Project with given parameters.")
+
+        return all_items.pop()
 
 
 class utils(object):
