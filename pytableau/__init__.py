@@ -4,14 +4,24 @@
 import logging
 import os
 import shutil
+import smtplib
 import sys
+import tempfile
 import time
+from datetime import datetime
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate
+from os.path import basename
 from pathlib import Path
+from smtpd import COMMASPACE
+from urllib.parse import quote_plus
 
 import pandas as pd
 import tableaudocumentapi
 import tableauserverclient as TSC
-from tableauserverclient import ViewItem, WorkbookItem, DatasourceItem, ProjectItem
+from tableauserverclient import ViewItem, WorkbookItem, DatasourceItem, ProjectItem, PDFRequestOptions
 
 try:
     import PyPDF3
@@ -25,6 +35,32 @@ handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 log.addHandler(handler)
+
+
+class PyTableauUtils(object):
+
+    @staticmethod
+    def NoneToStr(string):
+        """
+
+        :param string:
+        :return:
+        """
+        return (string or '').replace('\r\n', ' ').replace('\n', ' ').replace('\t', ' ')
+
+    @staticmethod
+    def clean_folder(dirPath):
+        """
+
+        :param dirPath:
+        """
+        fileList = os.listdir(dirPath)
+        for fileName in fileList:
+            file = dirPath + "/" + fileName
+            if os.path.isdir(file):
+                shutil.rmtree(file)
+            else:
+                os.remove(file)
 
 
 class PyTableau(object):
@@ -42,8 +78,17 @@ class PyTableau(object):
         log.info("Tableau Server Baseurl %s " % self.server.baseurl)
         self.sign_in()
 
+    def __del__(self):
+        try:
+            self.server.auth.sign_out()
+        except:
+            pass
+
     def sign_in(self):
         self.tableau_auth = self.server.auth.sign_in(self.tableau_auth)
+
+    def sign_out(self):
+        self.server.auth.sign_out()
 
     def download_all_datasources(self, download_dir, include_extract=False):
         """
@@ -51,7 +96,7 @@ class PyTableau(object):
         :param download_dir:
         :param include_extract:
         """
-        utils.clean_folder(download_dir)
+        PyTableauUtils.clean_folder(download_dir)
         for server_datasource in TSC.Pager(self.server.datasources):
             ds_download_dir = os.path.join(download_dir, server_datasource.project_name)
             if not os.path.exists(ds_download_dir):
@@ -68,7 +113,7 @@ class PyTableau(object):
         :param download_dir:
         """
 
-        utils.clean_folder(download_dir)
+        PyTableauUtils.clean_folder(download_dir)
         for server_workbook in TSC.Pager(self.server.workbooks):
             wb_download_dir = os.path.join(download_dir, server_workbook.project_name)
             if not os.path.exists(wb_download_dir):
@@ -166,22 +211,25 @@ class PyTableau(object):
         :param worksheet:
         :return:
         """
-        row = {"field_name": utils.NoneToStr(field.caption), "field_aggregation": utils.NoneToStr(field._aggregation),
-               "field_alias": utils.NoneToStr(field.alias), "field_calculation": utils.NoneToStr(field.calculation),
-               "field_datatype": utils.NoneToStr(field.datatype),
-               "field_description": utils.NoneToStr(field.description), "field_id": utils.NoneToStr(field.id),
-               "field_role": utils.NoneToStr(field.role), "field_type": utils.NoneToStr(field._type),
-               'data_source_name': utils.NoneToStr(datasource.name or datasource.caption),
-               'data_source_caption': utils.NoneToStr(datasource.caption),
-               'data_source_version': utils.NoneToStr(datasource.version), 'data_source_connections': '@TODO'}
+        row = {"field_name": PyTableauUtils.NoneToStr(field.caption),
+               "field_aggregation": PyTableauUtils.NoneToStr(field._aggregation),
+               "field_alias": PyTableauUtils.NoneToStr(field.alias),
+               "field_calculation": PyTableauUtils.NoneToStr(field.calculation),
+               "field_datatype": PyTableauUtils.NoneToStr(field.datatype),
+               "field_description": PyTableauUtils.NoneToStr(field.description),
+               "field_id": PyTableauUtils.NoneToStr(field.id),
+               "field_role": PyTableauUtils.NoneToStr(field.role), "field_type": PyTableauUtils.NoneToStr(field._type),
+               'data_source_name': PyTableauUtils.NoneToStr(datasource.name or datasource.caption),
+               'data_source_caption': PyTableauUtils.NoneToStr(datasource.caption),
+               'data_source_version': PyTableauUtils.NoneToStr(datasource.version), 'data_source_connections': '@TODO'}
 
         if workbook:
-            row['workbook_name'] = utils.NoneToStr(os.path.basename(workbook.filename))
+            row['workbook_name'] = PyTableauUtils.NoneToStr(os.path.basename(workbook.filename))
         else:
             row['workbook_name'] = ''
 
         if worksheet:
-            row['worksheet_name'] = utils.NoneToStr(worksheet)
+            row['worksheet_name'] = PyTableauUtils.NoneToStr(worksheet)
         else:
             row['workbook_name'] = ''
 
@@ -255,139 +303,309 @@ class PyTableau(object):
                 return self.refresh_extract(ds_item=ds_item, attempt=attempt, current_attempt=current_attempt)
 
     def get_workbook_views(self, workbook_id):  # -> Iterable of views
+        """
+
+        :param workbook_id:
+        :return:
+        """
         workbook = self.server.workbooks.get_by_id(workbook_id)
         self.server.workbooks.populate_views(workbook)
         return workbook.views
 
-    def _download_view_pdf(self, view: ViewItem, dest_dir):  # -> Filename to downloaded pdf
-        log.info("Exporting View:%s  Id:%s" % (view.name, view.id))
+    def _download_view_pdf(self, view: ViewItem, dest_dir,
+                           view_filters: PDFRequestOptions = None):  # -> Filename to downloaded pdf
+        log.debug("Exporting View:%s  Id:%s" % (view.name, view.id))
         Path(dest_dir).mkdir(parents=True, exist_ok=True)
         destination_filename = "%s.pdf" % os.path.join(dest_dir, view.id)
-        self.server.views.populate_pdf(view)
+        self.server.views.populate_pdf(view_item=view, req_options=view_filters)
         with open(destination_filename, 'wb') as f:
             f.write(view.pdf)
 
         return destination_filename
 
-    def download_workbook_pdf(self, workbook: WorkbookItem, dest_dir):
+    def download_workbook_pdf(self, workbook: WorkbookItem, dest_dir, data_filters: dict = None):
+        """
+
+        :param workbook:
+        :param dest_dir:
+        :return:
+        """
         self.server.workbooks.populate_views(workbook)
 
         _pdf_merger = PyPDF3.PdfFileMerger()
         _is_pdf_content_generated = False
+        _pdf_file = os.path.join(dest_dir, workbook.name) + ".pdf"
+        _vw_filters = PDFRequestOptions()
+
+        for name, value in data_filters.items():
+            _vw_filters.vf(name=quote_plus(name), value=quote_plus(value))
+
         for _view in workbook.views:
-            _downloaded_wv = self._download_view_pdf(_view, dest_dir=os.path.join(dest_dir, 'views'))
+            _downloaded_wv = self._download_view_pdf(_view, dest_dir=os.path.join(dest_dir, 'views'),
+                                                     view_filters=_vw_filters)
             _pdf_merger.append(_downloaded_wv)
             _is_pdf_content_generated = True
         if _is_pdf_content_generated:
-            _pdf_merger.write(os.path.join(dest_dir, workbook.name) + ".pdf")
+            _pdf_merger.write(_pdf_file)
             _pdf_merger.close()
+            log.info("Exported Workbook to pdf %s" % _pdf_file)
         else:
             raise Exception("No Pdf Content Generated")
+        return _pdf_file
 
-        print(workbook.id)
+    # implement @TODO
+    def download_workbook(self, file_type: str, workbook: WorkbookItem, dest_dir, data_filters: dict = None):
+        if file_type.lower() == "pdf":
+            return self.download_workbook_pdf(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters)
+        # elif file_type.lower() == "png" :
+        #    return self.download_workbook_png(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
+        # elif file_type.lower() == "csv" :
+        #    return self.download_workbook_csv(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
+        # else :
+        #     raise Exception("Unexpected file_type:%s !"% file_type)
 
     def _get_request_option(self, name=None, project_name=None, tag=None) -> TSC.RequestOptions:
         req_option = TSC.RequestOptions()
-        if name is not None:
+        if name:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Name,
                                              TSC.RequestOptions.Operator.Equals,
-                                             name))
-        if project_name is not None:
+                                             quote_plus(name)))
+        if project_name:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.ProjectName,
                                              TSC.RequestOptions.Operator.Equals,
-                                             project_name))
-        if tag is not None:
+                                             quote_plus(project_name)))
+        if tag:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Tags,
                                              TSC.RequestOptions.Operator.Equals,
-                                             tag))
+                                             quote_plus(tag)))
         return req_option
 
     def get_workbook_by_name(self, name, project_name=None, tag=None) -> WorkbookItem:
+        """
+
+        :param name:
+        :param project_name:
+        :param tag:
+        :return:
+        """
         req_option = self._get_request_option(name=name, project_name=project_name, tag=tag)
         all_items, pagination_item = self.server.workbooks.get(req_options=req_option)
         if not all_items:
-            raise LookupError("Workbook with given parameters was not found.")
+            raise LookupError("No Workbook with given parameters (name:'%s', project:'%s', tag:'%s') found!" % (
+                name, project_name, tag))
         if len(all_items) > 1:
-            raise LookupError("Found multiple Workbooks with given parameters.")
+            raise LookupError("Found multiple Workbooks with given parameters! (name:'%s', project:'%s', tag:'%s')" % (
+                name, project_name, tag))
 
         return all_items.pop()
 
     def get_workbooks_by_tag(self, tag, project_name=None) -> [WorkbookItem]:
+        """
+
+        :param tag:
+        :param project_name:
+        :return:
+        """
         req_option = self._get_request_option(tag=tag, project_name=project_name)
         all_items, pagination_item = self.server.workbooks.get(req_options=req_option)
         if not all_items:
-            raise LookupError("Workbook with given parameters was not found.")
+            raise LookupError("No Workbook with given parameters found!")
 
         return all_items
 
     def get_datasource_by_name(self, name, project_name=None, tag=None) -> DatasourceItem:
+        """
+
+        :param name:
+        :param project_name:
+        :param tag:
+        :return:
+        """
         req_option = self._get_request_option(name=name, project_name=project_name, tag=tag)
 
         all_items, pagination_item = self.server.datasources.get(req_options=req_option)
         if not all_items:
-            raise LookupError("Datasource with given parameters was not found.")
+            raise LookupError("No Datasource with given parameters found!")
         if len(all_items) > 1:
             raise LookupError("Found multiple Datasources with given parameters.")
 
         return all_items.pop()
 
     def get_project_by_name(self, name, parant_project_name=None, tag=None) -> ProjectItem:
+        """
+
+        :param name:
+        :param parant_project_name:
+        :param tag:
+        :return:
+        """
         req_option = self._get_request_option(name=name, project_name=parant_project_name, tag=tag)
 
         all_items, pagination_item = self.server.datasources.get(req_options=req_option)
         if not all_items:
-            raise LookupError("Project with given parameters was not found.")
+            raise LookupError("No Project with given parameters found!")
         if len(all_items) > 1:
             raise LookupError("Found multiple Project with given parameters.")
 
         return all_items.pop()
 
 
-class utils(object):
+class PyTableauReportScheduler(object):
+    """
 
-    @staticmethod
-    def merge_two_dicts(x, y):
+    """
+
+    def __init__(self, tableau: PyTableau, smtp_server: smtplib.SMTP_SSL, schedule_tag, dailySchedulePrefix="Daily",
+                 weeklySchedulePrefix="Weekly", monthlySchedulePrefix="Monthly"):
+        self.tableau = tableau
+        self.schedule_tag = schedule_tag
+        self.dailySchedules = "%s:" % dailySchedulePrefix
+        self.weeklySchedules = "%s%s:" % (weeklySchedulePrefix, str(datetime.now().isoweekday()))
+        self.monthlySchedules = "%s%s:" % (monthlySchedulePrefix, str(datetime.now().day))
+        self.smtp_server: smtplib.SMTP_SSL = smtp_server
+
+        try:
+            log.debug(self.smtp_server.ehlo())
+            log.info(self.smtp_server.helo())
+        except Exception as e:
+            log.error(e)
+            raise e
+
+    def __del__(self):
+        try:
+            self.smtp_server.quit()
+        except:
+            pass
+
+    def get_scheduled_workbooks(self) -> [WorkbookItem]:
+        return self.tableau.get_workbooks_by_tag(tag=self.schedule_tag)
+
+    def _get_email_params(self, wb: WorkbookItem, schedule):
         """
 
-        :param x:
-        :param y:
+        :param wb:
+        :param schedule:
         :return:
         """
-        z = x.copy()  # start with x's keys and values
-        z.update(y)  # modifies z with y's keys and values & returns None
-        return z
+        email_to = list()
+        email_cc = list()
+        email_subject = wb.name
+        _to_prefix = schedule + 'to:'
+        _cc_prefix = schedule + 'cc:'
+        tag: str
+        for tag in wb.tags:
+            if tag.startswith(_to_prefix) and '@' in tag:
+                email_to.append(tag.replace(_to_prefix, ''))
+            if tag.startswith(_cc_prefix) and '@' in tag:
+                email_cc.append(tag.replace(_cc_prefix, ''))
 
-    @staticmethod
-    def NoneToStr(string):
+        return email_subject, email_to, email_cc
+
+    def _send_reports(self, send_from, schedule=None, email_subject=None, email_message=None,
+                      data_filters: dict = None):
+
+        log.info('Sending Reports With tag: %sto:user@email.com ' % schedule)
+
+        for wb in self.get_scheduled_workbooks():
+            subj, to, cc = self._get_email_params(wb, schedule)
+            if email_subject:
+                subj = email_subject
+
+            message = "Attached Report %s" % wb.name
+            if email_message:
+                message = email_message
+
+            if to:
+                log.info("Sending Workbook '%s' to: %s cc: %s" % (wb.name, COMMASPACE.join(to), COMMASPACE.join(cc)))
+                self._email(wb, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
+                            data_filters=data_filters)
+
+    def send_scheduled_reports(self, send_from, email_subject=None, email_message=None, data_filters: dict = None):
         """
 
-        :param string:
+        :param send_from:
+        :param email_subject:
+        :param email_message:
+        """
+        # self.smtp_server.connect()
+        self._send_reports(send_from=send_from, schedule=self.dailySchedules, email_subject=email_subject,
+                           email_message=email_message, data_filters=data_filters)
+        self._send_reports(send_from=send_from, schedule=self.weeklySchedules, email_subject=email_subject,
+                           email_message=email_message, data_filters=data_filters)
+        self._send_reports(send_from=send_from, schedule=self.monthlySchedules, email_subject=email_subject,
+                           email_message=email_message, data_filters=data_filters)
+
+    def send_schedule(self, send_from, schedule: str, email_subject=None, email_message=None,
+                      data_filters: dict = None):
+        """
+
+        :param send_from:
+        :param schedule:
+        :param email_subject:
+        :param email_message:
+        """
+        # self.smtp_server.connect()
+        schedule = "%s:" % schedule.strip(':')
+        self._send_reports(send_from=send_from, schedule=schedule, email_subject=email_subject,
+                           email_message=email_message, data_filters=data_filters)
+
+    def send_workbook(self, wb_name, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
+                      data_filters: dict = None):
+        """
+
+        :param wb_name:
+        :param send_from:
+        :param subj:
+        :param message:
+        :param to:
+        :param cc:
+        :param data_filters:
         :return:
         """
-        return (string or '').replace('\r\n', ' ').replace('\n', ' ').replace('\t', ' ')
+        wb = self.tableau.get_workbook_by_name(wb_name)
+        return self._email(wb=wb, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
+                           data_filters=data_filters)
 
-    @staticmethod
-    def clean_folder(dirPath):
+    def _email(self, wb, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
+               data_filters: dict = None):
         """
 
-        :param dirPath:
+        :param data_filters:
+        :param wb:
+        :param send_from:
+        :param subj:
+        :param message:
+        :param to:
+        :param cc:
         """
-        fileList = os.listdir(dirPath)
-        for fileName in fileList:
-            file = dirPath + "/" + fileName
-            if os.path.isdir(file):
-                shutil.rmtree(file)
-            else:
-                os.remove(file)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            assert isinstance(to, list), "to is not list!"
+            assert isinstance(cc, list), "cc is not list!"
+            if not subj:
+                subj = wb.name
+            if not message:
+                message = "Attached you can find %s " % wb.name
 
-            print(file)
+            msg = MIMEMultipart()
+            msg['From'] = send_from
+            msg['To'] = COMMASPACE.join(to)
+            if cc:
+                msg['Cc'] = COMMASPACE.join(cc)
+            msg['Date'] = formatdate(localtime=True)
+            msg['Subject'] = subj
 
-    @staticmethod
-    def extract_file_name(file):
-        """
+            msg.attach(MIMEText(message))
 
-        :param file:
-        :return:
-        """
-        base = os.path.basename(file)
-        return os.path.splitext(base)[0]
+            wb_pdf_file = self.tableau.download_workbook_pdf(workbook=wb, dest_dir=tmpdirname,
+                                                             data_filters=data_filters)
+            with open(wb_pdf_file, "rb") as myfile:
+                part = MIMEApplication(
+                    myfile.read(),
+                    Name=basename(wb_pdf_file)
+                )
+            # After the file is closed
+            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(wb_pdf_file)
+
+            msg.attach(part)
+            self.smtp_server.send_message(from_addr=self.smtp_server.user, to_addrs=to, msg=msg)
+            log.info("Sent Email subj:'%s' to: %s cc: %s" % (subj, COMMASPACE.join(to), COMMASPACE.join(cc)))
