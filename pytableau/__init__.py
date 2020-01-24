@@ -449,6 +449,54 @@ class PyTableau(object):
 
         return all_items.pop()
 
+    def update_all_datasource_connections(self, curr_server_address, curr_username, new_server_address=None,
+                                          new_server_port=None,
+                                          new_username=None, new_password=None, new_embed_password: bool = None):
+        log.info('Updating "%s" Connections! server :' % str(self.server.server_address))
+        for resource in TSC.Pager(self.server.datasources):
+            self.server.datasources.populate_connections(resource)
+            log.debug("Updating Connections for '%s' " % str(resource.name))
+            for conn in resource.connections:
+                if conn.server_address == curr_server_address and conn.username == curr_username:
+                    log.info("Updating Connection " + str(conn))
+                    if new_server_address is not None:
+                        conn.server_address = new_server_address
+                    if new_server_port is not None:
+                        conn.server_port = new_server_port
+                    if new_username is not None:
+                        conn.username = new_username
+                    if new_password is not None:
+                        conn.password = new_password
+                    if new_embed_password is not None:
+                        conn.embed_password = True
+                    self.server.datasources.update_connection(resource, conn)
+                    log.info('Updated Connection of "%s"  server_address:%s username:%s ' % (
+                        resource.name, curr_server_address, curr_username))
+
+    def update_all_workbook_connections(self, curr_server_address, curr_username, new_server_address=None,
+                                        new_server_port=None,
+                                        new_username=None, new_password=None, new_embed_password: bool = None):
+        log.info('Updating "%s" Connections! server :' % str(self.server.server_address))
+        for resource in TSC.Pager(self.server.workbooks):
+            self.server.workbooks.populate_connections(resource)
+            log.debug("Updating Connections for '%s' " % str(resource.name))
+            for conn in resource.connections:
+                if conn.server_address == curr_server_address and conn.username == curr_username:
+                    log.info("Updating Connection " + str(conn))
+                    if new_server_address is not None:
+                        conn.server_address = new_server_address
+                    if new_server_port is not None:
+                        conn.server_port = new_server_port
+                    if new_username is not None:
+                        conn.username = new_username
+                    if new_password is not None:
+                        conn.password = new_password
+                    if new_embed_password is not None:
+                        conn.embed_password = True
+                    self.server.workbooks.update_connection(resource, conn)
+                    log.info('Updated Connection of "%s"  server_address:%s username:%s ' % (
+                        resource.name, curr_server_address, curr_username))
+
 
 class PyTableauReportScheduler(object):
     """
