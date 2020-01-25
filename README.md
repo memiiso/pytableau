@@ -1,6 +1,12 @@
+# Installation
+```
+pip install https://github.com/memiiso/pytableau/archive/master.zip
+```
+
 # PyTableau
 
-tableau class to interact with tableau server and server content
+Python wrapper for tableau server api. 
+Tableau class to interact with tableau server and server content
 
 - download_all_datasources
 - download_all_workbooks
