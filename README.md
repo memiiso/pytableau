@@ -10,15 +10,29 @@ tableau class to interact with tableau server and server content
 - download_workbook_pdf
 
 # PyTableauReportScheduler
-tableau class to scheduling reports using workbook tags
+tableau class to emailing reports as pdf using workbook tags
 
-example a workbook with following tags sent to user1, user2 every day,
-sent to  user3 Weekly on Mondays, and sent to user4, user2 at the first day of month monthly.
+forexample a workbook with following tags 
+
+- sent to user1, user2 every day,
+- sent to  user3 Weekly on Mondays,
+- sent to user4, user2 at the first day of month every month.
 
 ```
-'scheduledReport','Daily:to:user1@mail.com','Daily:cc:user2@mail.com'
+'scheduledReport'
+,'Daily:to:user1@mail.com','Daily:cc:user2@mail.com'
 ,'Weekly1:to:user3@mail.com'
 ,'Monthly1:to:user4@mail.com','Monthly1:cc:user2@mail.com'
+```
+
+a workbook with following tags sent
+- Weekly every Wednesday
+- monthly every 16th day of month
+
+```
+'scheduledReport'
+,'Weekly3:to:user3@mail.com'
+,'Monthly16:to:user4@mail.com','Monthly1:cc:user2@mail.com'
 ```
 
 #### Schedule tags
