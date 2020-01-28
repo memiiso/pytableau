@@ -238,6 +238,7 @@ class PyTableau(object):
     def refresh_extracts(self, datasource_names, retry_attempt=2, synchronous=False):
         """
 
+        :param synchronous:
         :param datasource_names:
         :param retry_attempt:
         """
@@ -256,7 +257,7 @@ class PyTableau(object):
         for ds in datasource_list_server.values():
             try:
                 if ds.name.lower() in datasource_list_immutable_copy:
-                    log.info('Refreshing Datasource "%s" ' % ds.name)
+                    log.info('Starting extractRefresh Job for Datasource "%s" ' % ds.name)
                     refresh_job = self.refresh_extract(ds_item=ds, attempt=retry_attempt)
                     if refresh_job:
                         extract_refresh_jobs[ds.name + ':' + refresh_job.id] = refresh_job
@@ -265,21 +266,35 @@ class PyTableau(object):
                 log.warning(str(e).strip())
 
         if len(datasource_names):
-            log.error("Following Datasources are not Refreshed! %s " % str(datasource_names))
+            log.error("Following Datasources are not found on the server! %s " % str(datasource_names))
 
         if synchronous is True and len(extract_refresh_jobs) > 0:
+            failed_extract_refresh_jobs = dict()
             extract_refresh_jobs_immutable_copy = extract_refresh_jobs.copy()
-            log.info("Waiting for Extract Jobs to Finish!")
+            log.info("Waiting for extractRefresh Jobs to Finish!")
             while len(extract_refresh_jobs) > 0:
                 time.sleep(300)
                 for key, _job in extract_refresh_jobs_immutable_copy.items():
                     if key in extract_refresh_jobs.keys():  # if its not yet finished!
                         time.sleep(5)
                         job = self.server.jobs.get_by_id(_job.id)
-                        log.info("%s Refresh Running %s " % (key, str(job)))
                         if job.completed_at is not None:
-                            log.info("%s Refresh Finished in %s " % (key, (job.completed_at - job.started_at)))
+                            if job.finish_code == '0':
+                                log.info("%s extractRefresh Succeeded %s " % (key, str(job)))
+                                log.info(
+                                    "%s extractRefresh Succeeded in %s " % (key, (job.completed_at - job.started_at)))
+                            else:
+                                log.error("%s extractRefresh Failed %s " % (key, str(job)))
+                                log.error(
+                                    "%s extractRefresh Failed in %s " % (key, (job.completed_at - job.started_at)))
+                                failed_extract_refresh_jobs[key] = job
                             extract_refresh_jobs.pop(key)
+                        else:
+                            log.info("%s extractRefresh Running %s " % (key, str(job)))
+
+            if len(failed_extract_refresh_jobs) > 0:
+                raise Exception(
+                    "Following extractRefresh Jobs are Failed \n[%s]!" % ','.join(failed_extract_refresh_jobs.keys()))
 
     def refresh_extract(self, ds_item, attempt=1, current_attempt=1):
         """

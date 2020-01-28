@@ -72,14 +72,14 @@ datasource_list = ['my Datasource1', 'my Datasource2', "Datasource3"]
 myTableau.refresh_extracts(datasource_names=datasource_list, synchronous=True)
 ```
 
-## Downloading All Workbooks, Datasources From Server
+## Downloading All Server Workbooks, Datasources
 ```python
 download_dir = "/tmp/test_download_all_datasources"
 Path(download_dir).mkdir(parents=True, exist_ok=True)
 myTableau.download_all_workbooks(download_dir)
 ```
 
-## Querying Workbooks, Datasources From Server
+## Querying Server Workbooks, Datasources
 ```python
 tag='dailyKpi'
 wbs  = myTableau.get_workbooks_by_tag(tag=tag)
@@ -125,7 +125,7 @@ myTabScheduler= PyTableauReportScheduler(tableau=myTableau,smtp_server=mysmtp,sc
 ```
 
 
-## Triggering Reports
+## Emailing Reports
 ```python
 datafilters = dict()
 datafilters["Report Year"]="2019,2020"
