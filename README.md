@@ -1,6 +1,6 @@
 # Installation
 ```
-pip install https://github.com/memiiso/pytableau/archive/master.zip
+pip install https://github.com/memiiso/pytableau/archive/master.zip --upgrade --user
 ```
 
 # PyTableau

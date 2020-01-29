@@ -1,9 +1,23 @@
 [MASTER]
 disable=
-    C,R, # (convention and refactor):
-    W, # warnings
-    C0114, # missing-module-docstring
-    C0301, # Line too long (112/100) (line-too-long)
-    W1201, # Specify string format arguments as logging function parameters (logging-not-lazy)
-    W0703, # Catching too general exception Exception (broad-except)
-    W0212, #: Access to a protected member
+    # C,R, # (convention and refactor):
+    missing-module-docstring,
+    missing-function-docstring,
+    line-too-long,
+    invalid-name,
+    logging-not-lazy,
+    broad-except,
+    protected-access,
+    C0330,
+    too-many-arguments,
+    bare-except,
+    empty-docstring,
+    too-many-nested-blocks,
+    too-many-branches,
+    no-self-use,
+    too-many-locals,
+    no-else-raise,
+    no-else-return
+
+
+dummy-variables-rgx=_|pagination_item

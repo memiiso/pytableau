@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import logging
 import os
 import shutil
@@ -37,7 +36,10 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 
 
-class PyTableauUtils(object):
+class PyTableauUtils():
+    """
+
+    """
 
     @staticmethod
     def NoneToStr(string):
@@ -63,7 +65,7 @@ class PyTableauUtils(object):
                 os.remove(file)
 
 
-class PyTableau(object):
+class PyTableau():
     """
 
     """
@@ -265,7 +267,7 @@ class PyTableau(object):
             except Exception as e:
                 log.warning(str(e).strip())
 
-        if len(datasource_names):
+        if len(datasource_names) > 0:
             log.error("Following Datasources are not found on the server! %s " % str(datasource_names))
 
         if synchronous is True and len(extract_refresh_jobs) > 0:
@@ -338,7 +340,8 @@ class PyTableau(object):
 
         return destination_filename
 
-    def download_workbook_pdf(self, workbook: WorkbookItem, dest_dir, data_filters: dict = None):
+    def download_workbook_pdf(self, workbook: WorkbookItem, dest_dir, data_filters: dict = None, page_type=None,
+                              orientation=None):
         """
 
         :param workbook:
@@ -350,10 +353,14 @@ class PyTableau(object):
         _pdf_merger = PyPDF3.PdfFileMerger()
         _is_pdf_content_generated = False
         _pdf_file = os.path.join(dest_dir, workbook.name) + ".pdf"
-        _vw_filters = PDFRequestOptions()
+        _vw_filters = PDFRequestOptions(page_type=page_type, orientation=orientation)
 
         for name, value in data_filters.items():
             _vw_filters.vf(name=quote_plus(name), value=quote_plus(value))
+
+        log.info(
+            "Exporting\nWorbook='%s' \nProject='%s' \nPage Type='%s' \nOrientation='%s' \nFilters='%s'\nFile='%s' " % (
+                workbook.name, workbook.project_name, page_type, orientation, _vw_filters.view_filters, _pdf_file))
 
         for _view in workbook.views:
             _downloaded_wv = self._download_view_pdf(_view, dest_dir=os.path.join(dest_dir, 'views'),
@@ -369,15 +376,17 @@ class PyTableau(object):
         return _pdf_file
 
     # implement @TODO
-    def download_workbook(self, file_type: str, workbook: WorkbookItem, dest_dir, data_filters: dict = None):
+    def download_workbook(self, file_type: str, workbook: WorkbookItem, dest_dir, data_filters: dict = None,
+                          page_type=None, orientation=None):
         if file_type.lower() == "pdf":
-            return self.download_workbook_pdf(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters)
+            return self.download_workbook_pdf(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters,
+                                              page_type=page_type, orientation=orientation)
         # elif file_type.lower() == "png" :
         #    return self.download_workbook_png(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
         # elif file_type.lower() == "csv" :
         #    return self.download_workbook_csv(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
-        # else :
-        #     raise Exception("Unexpected file_type:%s !"% file_type)
+        else:
+            raise Exception("Unexpected file_type:%s !" % file_type)
 
     def _get_request_option(self, name=None, project_name=None, tag=None) -> TSC.RequestOptions:
         req_option = TSC.RequestOptions()
@@ -513,7 +522,7 @@ class PyTableau(object):
                         resource.name, curr_server_address, curr_username))
 
 
-class PyTableauReportScheduler(object):
+class PyTableauReportScheduler():
     """
 
     """
@@ -522,9 +531,9 @@ class PyTableauReportScheduler(object):
                  weeklySchedulePrefix="Weekly", monthlySchedulePrefix="Monthly"):
         self.tableau = tableau
         self.schedule_tag = schedule_tag
-        self.dailySchedules = "%s:" % dailySchedulePrefix
-        self.weeklySchedules = "%s%s:" % (weeklySchedulePrefix, str(datetime.now().isoweekday()))
-        self.monthlySchedules = "%s%s:" % (monthlySchedulePrefix, str(datetime.now().day))
+        self.dailySchedules = "%s" % dailySchedulePrefix
+        self.weeklySchedules = "%s%s" % (weeklySchedulePrefix, str(datetime.now().isoweekday()))
+        self.monthlySchedules = "%s%s" % (monthlySchedulePrefix, str(datetime.now().day))
         self.smtp_server: smtplib.SMTP_SSL = smtp_server
 
         try:
@@ -553,8 +562,8 @@ class PyTableauReportScheduler(object):
         email_to = list()
         email_cc = list()
         email_subject = wb.name
-        _to_prefix = schedule + 'to:'
-        _cc_prefix = schedule + 'cc:'
+        _to_prefix = schedule + ':to:'
+        _cc_prefix = schedule + ':cc:'
         tag: str
         for tag in wb.tags:
             if tag.startswith(_to_prefix) and '@' in tag:
@@ -567,7 +576,7 @@ class PyTableauReportScheduler(object):
     def _send_reports(self, send_from, schedule=None, email_subject=None, email_message=None,
                       data_filters: dict = None):
 
-        log.info('Sending Reports With tag: %sto:user@email.com ' % schedule)
+        log.info('Sending Reports With tag: %s:to:user@email.com ' % schedule)
 
         for wb in self.get_scheduled_workbooks():
             subj, to, cc = self._get_email_params(wb, schedule)
@@ -613,7 +622,7 @@ class PyTableauReportScheduler(object):
                            email_message=email_message, data_filters=data_filters)
 
     def send_workbook(self, wb_name, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
-                      data_filters: dict = None):
+                      wb_project_name=None, wb_tag=None, data_filters: dict = None, page_type=None, orientation=None):
         """
 
         :param wb_name:
@@ -625,12 +634,12 @@ class PyTableauReportScheduler(object):
         :param data_filters:
         :return:
         """
-        wb = self.tableau.get_workbook_by_name(wb_name)
+        wb = self.tableau.get_workbook_by_name(name=wb_name, project_name=wb_project_name, tag=wb_tag)
         return self._email(wb=wb, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
-                           data_filters=data_filters)
+                           data_filters=data_filters, page_type=page_type, orientation=orientation)
 
     def _email(self, wb, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
-               data_filters: dict = None):
+               data_filters: dict = None, page_type=None, orientation=None):
         """
 
         :param data_filters:
@@ -659,8 +668,12 @@ class PyTableauReportScheduler(object):
 
             msg.attach(MIMEText(message))
 
-            wb_pdf_file = self.tableau.download_workbook_pdf(workbook=wb, dest_dir=tmpdirname,
-                                                             data_filters=data_filters)
+            wb_pdf_file = self.tableau.download_workbook_pdf(workbook=wb,
+                                                             dest_dir=tmpdirname,
+                                                             data_filters=data_filters,
+                                                             page_type=page_type,
+                                                             orientation=orientation
+                                                             )
             with open(wb_pdf_file, "rb") as myfile:
                 part = MIMEApplication(
                     myfile.read(),
