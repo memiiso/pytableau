@@ -437,14 +437,13 @@ class PyTableau():
             _img_list.append(Image.open(_downloaded_wv))
 
         if _img_list:
-            _img_file = self._img_concat_v_multi_resize(im_list=_img_list).save(_img_file)
+            self._img_concat_v_multi_resize(im_list=_img_list).save(_img_file)
             log.info("Exported Workbook to png %s" % _img_file)
         else:
             raise Exception("No Image Content Generated")
 
         return _img_file
 
-    # implement @TODO
     def download_workbook(self, file_type: str, workbook: WorkbookItem, dest_dir, data_filters: dict = None,
                           page_type=None, orientation=None):
         if file_type.lower() == "pdf":
@@ -659,7 +658,7 @@ class PyTableauReportScheduler():
             if to:
                 log.info("Sending Workbook '%s' to: %s cc: %s" % (wb.name, COMMASPACE.join(to), COMMASPACE.join(cc)))
                 self._email(wb, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
-                            data_filters=data_filters)
+                            data_filters=data_filters, file_type='pdf')
 
     def send_scheduled_reports(self, send_from, email_subject=None, email_message=None, data_filters: dict = None):
         """
@@ -691,7 +690,8 @@ class PyTableauReportScheduler():
                            email_message=email_message, data_filters=data_filters)
 
     def send_workbook(self, wb_name, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
-                      wb_project_name=None, wb_tag=None, data_filters: dict = None, page_type=None, orientation=None):
+                      wb_project_name=None, wb_tag=None, data_filters: dict = None, page_type=None, orientation=None,
+                      file_type='pdf'):
         """
 
         :param wb_name:
@@ -704,10 +704,10 @@ class PyTableauReportScheduler():
         :return:
         """
         wb = self.tableau.get_workbook_by_name(name=wb_name, project_name=wb_project_name, tag=wb_tag)
-        return self._email(wb=wb, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
+        return self._email(wb=wb, file_type=file_type, send_from=send_from, subj=subj, message=message, to=to, cc=cc,
                            data_filters=data_filters, page_type=page_type, orientation=orientation)
 
-    def _email(self, wb, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
+    def _email(self, wb, file_type, send_from: str, to: list, cc: list = None, subj: str = None, message: str = None,
                data_filters: dict = None, page_type=None, orientation=None):
         """
 
@@ -739,19 +739,20 @@ class PyTableauReportScheduler():
 
             msg.attach(MIMEText(message))
 
-            wb_pdf_file = self.tableau.download_workbook_pdf(workbook=wb,
-                                                             dest_dir=tmpdirname,
-                                                             data_filters=data_filters,
-                                                             page_type=page_type,
-                                                             orientation=orientation
-                                                             )
-            with open(wb_pdf_file, "rb") as myfile:
+            wb_file = self.tableau.download_workbook(file_type=file_type,
+                                                     workbook=wb,
+                                                     dest_dir=tmpdirname,
+                                                     data_filters=data_filters,
+                                                     page_type=page_type,
+                                                     orientation=orientation
+                                                     )
+            with open(wb_file, "rb") as myfile:
                 part = MIMEApplication(
                     myfile.read(),
-                    Name=basename(wb_pdf_file)
+                    Name=basename(wb_file)
                 )
             # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(wb_pdf_file)
+            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(wb_file)
 
             msg.attach(part)
             self.smtp_server.send_message(from_addr=self.smtp_server.user, to_addrs=_m_to, msg=msg)
