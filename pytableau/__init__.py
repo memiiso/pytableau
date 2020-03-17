@@ -661,8 +661,10 @@ class PyTableauReportScheduler():
             msg = MIMEMultipart()
             msg['From'] = send_from
             msg['To'] = COMMASPACE.join(to)
+            _m_to = to
             if cc:
                 msg['Cc'] = COMMASPACE.join(cc)
+                _m_to = _m_to + cc
             msg['Date'] = formatdate(localtime=True)
             msg['Subject'] = subj
 
@@ -683,5 +685,5 @@ class PyTableauReportScheduler():
             part['Content-Disposition'] = 'attachment; filename="%s"' % basename(wb_pdf_file)
 
             msg.attach(part)
-            self.smtp_server.send_message(from_addr=self.smtp_server.user, to_addrs=to, msg=msg)
-            log.info("Sent Email subj:'%s' to: %s cc: %s" % (subj, COMMASPACE.join(to), COMMASPACE.join(cc)))
+            self.smtp_server.send_message(from_addr=self.smtp_server.user, to_addrs=_m_to, msg=msg)
+            log.info("Sent Email subj:'%s' to: %s cc: %s" % (subj, COMMASPACE.join(_m_to), COMMASPACE.join(cc)))
