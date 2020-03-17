@@ -20,7 +20,9 @@ from urllib.parse import quote_plus
 import pandas as pd
 import tableaudocumentapi
 import tableauserverclient as TSC
-from tableauserverclient import ViewItem, WorkbookItem, DatasourceItem, ProjectItem, PDFRequestOptions
+from PIL import Image
+from tableauserverclient import ViewItem, WorkbookItem, DatasourceItem, ProjectItem, PDFRequestOptions, \
+    ImageRequestOptions
 
 try:
     import PyPDF3
@@ -355,6 +357,9 @@ class PyTableau():
         _pdf_file = os.path.join(dest_dir, workbook.name) + ".pdf"
         _vw_filters = PDFRequestOptions(page_type=page_type, orientation=orientation)
 
+        if data_filters is None:
+            data_filters = dict()
+
         for name, value in data_filters.items():
             _vw_filters.vf(name=quote_plus(name), value=quote_plus(value))
 
@@ -375,14 +380,78 @@ class PyTableau():
             raise Exception("No Pdf Content Generated")
         return _pdf_file
 
+    def _download_view_png(self, view: ViewItem, dest_dir,
+                           view_filters: ImageRequestOptions = None):  # -> Filename to downloaded pdf
+        log.debug("Exporting View:%s  Id:%s" % (view.name, view.id))
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        destination_filename = "%s.png" % os.path.join(dest_dir, view.id)
+        self.server.views.populate_image(view_item=view, req_options=view_filters)
+        with open(destination_filename, 'wb') as image_file:
+            image_file.write(view.image)
+
+        return destination_filename
+
+    def _img_concat_v_multi_resize(self, im_list, resample=Image.BICUBIC):
+        min_width = min(im.width for im in im_list)
+        im_list_resize = [im.resize((min_width, int(im.height * min_width / im.width)), resample=resample)
+                          for im in im_list]
+        total_height = sum(im.height for im in im_list_resize)
+        dst = Image.new('RGB', (min_width, total_height))
+        pos_y = 0
+        for im in im_list_resize:
+            dst.paste(im, (0, pos_y))
+            pos_y += im.height
+        return dst
+
+    def download_workbook_png(self, workbook: WorkbookItem, dest_dir, data_filters: dict = None,
+                              imageresolution=None,
+                              maxage=None) -> str:
+        """
+
+        :param workbook:
+        :param dest_dir:
+        :param data_filters:
+        :param imageresolution:
+        :param maxage:
+        :return:
+        """
+        self.server.workbooks.populate_views(workbook)
+
+        _img_list = list()
+        _img_file = os.path.join(dest_dir, workbook.name) + ".png"
+        _vw_filters = ImageRequestOptions(imageresolution=imageresolution, maxage=maxage)
+
+        if data_filters is None:
+            data_filters = dict()
+
+        for name, value in data_filters.items():
+            _vw_filters.vf(name=quote_plus(name), value=quote_plus(value))
+
+        log.info(
+            "Exporting\nWorbook='%s' \nProject='%s' \nFilters='%s'\nFile='%s' " % (
+                workbook.name, workbook.project_name, _vw_filters.view_filters, _img_file))
+
+        for _view in workbook.views:
+            _downloaded_wv = self._download_view_png(_view, dest_dir=os.path.join(dest_dir, 'views'),
+                                                     view_filters=_vw_filters)
+            _img_list.append(Image.open(_downloaded_wv))
+
+        if _img_list:
+            _img_file = self._img_concat_v_multi_resize(im_list=_img_list).save(_img_file)
+            log.info("Exported Workbook to png %s" % _img_file)
+        else:
+            raise Exception("No Image Content Generated")
+
+        return _img_file
+
     # implement @TODO
     def download_workbook(self, file_type: str, workbook: WorkbookItem, dest_dir, data_filters: dict = None,
                           page_type=None, orientation=None):
         if file_type.lower() == "pdf":
             return self.download_workbook_pdf(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters,
                                               page_type=page_type, orientation=orientation)
-        # elif file_type.lower() == "png" :
-        #    return self.download_workbook_png(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
+        elif file_type.lower() == "png":
+            return self.download_workbook_png(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters)
         # elif file_type.lower() == "csv" :
         #    return self.download_workbook_csv(workbook=workbook,dest_dir=dest_dir,data_filters=data_filters)
         else:

@@ -15,6 +15,6 @@ setup(
     download_url='https://github.com/memiiso/pytableau/archive/master.zip',
     include_package_data=True,
     test_suite='tests',
-    install_requires=['tableaudocumentapi', 'tableauserverclient>=0.9', 'PyPDF3'],
+    install_requires=['tableaudocumentapi', 'tableauserverclient>=0.9', 'PyPDF3', 'Pillow>=7.0.0'],
     python_requires='>=3',
 )
