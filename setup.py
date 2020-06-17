@@ -7,7 +7,7 @@ os.chdir(setup_py_dir)
 
 setup(
     name='pytableau',
-    version='1.0.0',
+    version='1.0.1',
     packages=find_packages(),
     author='Memiiso',
     description='Python Tableau Wrapper',
