@@ -461,15 +461,15 @@ class PyTableau():
         if name:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Name,
                                              TSC.RequestOptions.Operator.Equals,
-                                             quote_plus(name)))
+                                             name))
         if project_name:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.ProjectName,
                                              TSC.RequestOptions.Operator.Equals,
-                                             quote_plus(project_name)))
+                                             project_name))
         if tag:
             req_option.filter.add(TSC.Filter(TSC.RequestOptions.Field.Tags,
                                              TSC.RequestOptions.Operator.Equals,
-                                             quote_plus(tag)))
+                                             tag))
         return req_option
 
     def get_workbook_by_name(self, name, project_name=None, tag=None) -> WorkbookItem:
