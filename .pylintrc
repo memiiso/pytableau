@@ -17,7 +17,8 @@ disable=
     no-self-use,
     too-many-locals,
     no-else-raise,
-    no-else-return
+    no-else-return,
+    too-many-public-methods
 
 
 dummy-variables-rgx=_|pagination_item
