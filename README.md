@@ -1,3 +1,6 @@
+Distribute tableau reports using workbook tags. using  any of csv, pdf, pgn formats
+Interact with tableu server, Download tableu content, triger datasource/extract refresh task
+
 # Installation
 ```
 pip install https://github.com/memiiso/pytableau/archive/master.zip --upgrade --user
@@ -14,6 +17,8 @@ Tableau class to interact with tableau server and server content
 - refresh_extracts
 - export_all_workbook_fields_to_csv
 - download_workbook_pdf
+- download_workbook_png
+- download_workbook_csv
 
 # PyTableauReportScheduler
 tableau class to emailing reports as pdf using workbook tags
