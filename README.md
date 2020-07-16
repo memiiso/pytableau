@@ -1,3 +1,5 @@
+![Python package](https://github.com/memiiso/pytableau/workflows/Python%20package/badge.svg)
+
 Distribute Tableu reports using workbook tags. Using any of csv, pdf, pgn export formats
 Interact with Tableu server, Download tableu content, triger datasource/extract refresh task
 
