@@ -2,4 +2,6 @@ from unittest import TestCase
 
 
 class TestPyTableau(TestCase):
-    pass
+
+    def test_empty(self):
+        pass
