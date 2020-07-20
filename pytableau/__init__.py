@@ -517,7 +517,7 @@ class PyTableau():
         elif file_type.lower() == "csv":
             return self.download_workbook_csv(workbook=workbook, dest_dir=dest_dir, data_filters=data_filters)
         else:
-            raise Exception("Unexpected file_type:%s !" % file_type)
+            raise Exception("Unexpected download file_type '%s'!" % file_type)
 
     def _get_request_option(self, name=None, project_name=None, tag=None) -> TSC.RequestOptions:
         req_option = TSC.RequestOptions()
