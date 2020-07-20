@@ -407,7 +407,7 @@ class PyTableau():
 
     def download_workbook_png(self, workbook: WorkbookItem, dest_dir, data_filters: dict = None,
                               imageresolution=None,
-                              maxage=None) -> str:
+                              maxage=-1) -> str:
         """
 
         :param workbook:
