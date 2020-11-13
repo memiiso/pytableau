@@ -653,6 +653,57 @@ class PyTableau():
                         resource.name, curr_server_address, curr_username))
 
 
+class PyTableauContent(PyTableau):
+    def __init__(self, content_type, server_address, username, password, site_id, use_server_version=True,
+                 verify_ssl=True):
+        super().__init__(server_address, username, password, site_id, use_server_version, verify_ssl)
+
+        endpoints = {
+            'workbook': self.server.workbooks,
+            'datasource': self.server.datasources,
+            'subscription': self.server.subscriptions
+        }
+        endpoint_items = {
+            'workbook': TSC.WorkbookItem,
+            'datasource': TSC.DatasourceItem,
+            'subscription': TSC.SubscriptionItem
+        }
+        endpoint_file_extensions = {
+            'workbook': [".twb", ".twbx"],
+            'datasource': ['.tds', '.tdsx'],
+            'subscription': ['.subs']
+        }
+        if content_type not in endpoints:
+            raise ("Accepted resource_type values are %s " % str(endpoints))
+        self.endpoint = endpoints.get(content_type)
+        self.endpoint_item = endpoint_items.get(content_type)
+        self.endpoint_file_extensions = endpoint_file_extensions.get(content_type)
+
+
+class PyTableauWorkbook(PyTableauContent):
+
+    def __init__(self, server_address, username, password, site_id, use_server_version=True, verify_ssl=True):
+        super().__init__(content_type='workbook', server_address=server_address, username=username, password=password,
+                         site_id=site_id, use_server_version=use_server_version,
+                         verify_ssl=verify_ssl
+                         )
+        self.endpoint = self.server.workbooks
+        self.endpoint_item = TSC.WorkbookItem
+        self.endpoint_file_extensions = [".twb", ".twbx"]
+
+
+class PyTableauDatasource(PyTableauContent):
+
+    def __init__(self, server_address, username, password, site_id, use_server_version=True, verify_ssl=True):
+        super().__init__(content_type='datasource', server_address=server_address, username=username, password=password,
+                         site_id=site_id, use_server_version=use_server_version,
+                         verify_ssl=verify_ssl
+                         )
+        self.endpoint = self.server.datasources
+        self.endpoint_item = TSC.DatasourceItem
+        self.endpoint_file_extensions = ['.tds', '.tdsx']
+
+
 class PyTableauReportScheduler():
     """
 
