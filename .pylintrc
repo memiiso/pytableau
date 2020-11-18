@@ -18,7 +18,8 @@ disable=
     too-many-locals,
     no-else-raise,
     no-else-return,
-    too-many-public-methods
+    too-many-public-methods,
+    raise-missing-from
 
 
 dummy-variables-rgx=_|pagination_item
