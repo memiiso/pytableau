@@ -241,7 +241,8 @@ class PyTableau():
 
         return row
 
-    def refresh_extracts(self, datasource_names, retry_attempt=2, synchronous=False):
+    def refresh_extracts(self, datasource_names, retry_attempt=2, synchronous=False,
+                         project_name_contains: list = None):
         """
 
         :param synchronous:
@@ -256,8 +257,12 @@ class PyTableau():
         extract_refresh_jobs = dict()
 
         # get all datasources from server
+        ds: DatasourceItem
         for ds in TSC.Pager(self.server.datasources):
-            datasource_list_server[ds.id] = ds
+            if project_name_contains is None:
+                datasource_list_server[ds.id] = ds
+            elif any(project in str(ds.project_name) for project in project_name_contains):
+                datasource_list_server[ds.id] = ds
 
         # loop over server datasources and refresh if its name found in given DS list
         for ds in datasource_list_server.values():
