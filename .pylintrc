@@ -19,7 +19,8 @@ disable=
     no-else-raise,
     no-else-return,
     too-many-public-methods,
-    raise-missing-from
+    raise-missing-from,
+    too-many-statements
 
 
 dummy-variables-rgx=_|pagination_item

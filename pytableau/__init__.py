@@ -249,35 +249,46 @@ class PyTableau():
         :param datasource_names:
         :param retry_attempt:
         """
-        log.info("Refreshing Datasources %s on %s " % (str(datasource_names), self.server.server_address))
+        log.info("Refreshing %s on %s " % (str(datasource_names), self.server.server_address))
 
         datasource_names = [item.lower() for item in datasource_names]
-        datasource_list_immutable_copy = datasource_names.copy()
-        datasource_list_server = dict()
+        item_list_immutable_copy = datasource_names.copy()
+        item_list_server = dict()
         extract_refresh_jobs = dict()
 
         # get all datasources from server
         ds: DatasourceItem
         for ds in TSC.Pager(self.server.datasources):
             if project_name_contains is None:
-                datasource_list_server[ds.id] = ds
+                item_list_server[ds.id] = ds
             elif any(project in str(ds.project_name) for project in project_name_contains):
-                datasource_list_server[ds.id] = ds
+                item_list_server[ds.id] = ds
+
+        # get all workbooks from server
+        wb: WorkbookItem
+        for wb in TSC.Pager(self.server.datasources):
+            if project_name_contains is None:
+                item_list_server[wb.id] = wb
+            elif any(project in str(wb.project_name) for project in project_name_contains):
+                item_list_server[wb.id] = wb
 
         # loop over server datasources and refresh if its name found in given DS list
-        for ds in datasource_list_server.values():
+        for item in item_list_server.values():
             try:
-                if ds.name.lower() in datasource_list_immutable_copy:
-                    log.info('Starting extractRefresh Job for Datasource "%s" ' % ds.name)
-                    refresh_job = self.refresh_extract(ds_item=ds, attempt=retry_attempt)
+                if item.name.lower() in item_list_immutable_copy:
+                    log.info('Starting extractRefresh Job for "%s" ' % item.name)
+                    if isinstance(item, WorkbookItem):
+                        refresh_job = self.refresh_workbook(wb_item=item, attempt=retry_attempt)
+                    else:
+                        refresh_job = self.refresh_extract(ds_item=item, attempt=retry_attempt)
                     if refresh_job:
-                        extract_refresh_jobs[ds.name + ':' + refresh_job.id] = refresh_job
-                    datasource_names.remove(ds.name.lower())
+                        extract_refresh_jobs[item.name + ':' + refresh_job.id] = refresh_job
+                    datasource_names.remove(item.name.lower())
             except Exception as e:
                 log.warning(str(e).strip())
 
         if len(datasource_names) > 0:
-            log.error("Following Datasources are not found on the server! %s " % str(datasource_names))
+            log.error("Following Datasources/Workbooks are not found on the server! %s " % str(datasource_names))
 
         if synchronous is True and len(extract_refresh_jobs) > 0:
             failed_extract_refresh_jobs = dict()
@@ -327,6 +338,27 @@ class PyTableau():
                 log.debug(str(e))
                 log.info("Refreshing '%s' failed Trying %s th time" % (ds_item.name, str(current_attempt)))
                 return self.refresh_extract(ds_item=ds_item, attempt=attempt, current_attempt=current_attempt)
+
+    def refresh_workbook(self, wb_item, attempt=1, current_attempt=1):
+        """
+
+        :param wb_item:
+        :param attempt:
+        :param current_attempt:
+        :return:
+        """
+        try:
+            results = self.server.datasources.refresh(wb_item)
+            return results
+        except Exception as e:
+            if current_attempt >= attempt:
+                raise e
+            else:
+                current_attempt = current_attempt + 1
+                time.sleep(5)
+                log.debug(str(e))
+                log.info("Refreshing '%s' failed Trying %s th time" % (wb_item.name, str(current_attempt)))
+                return self.refresh_workbook(wb_item=wb_item, attempt=attempt, current_attempt=current_attempt)
 
     def get_workbook_views(self, workbook_id):  # -> Iterable of views
         """
