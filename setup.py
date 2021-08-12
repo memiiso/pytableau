@@ -16,6 +16,6 @@ setup(
     include_package_data=True,
     test_suite='tests',
     install_requires=['pandas>=1.0.1', 'tableaudocumentapi>=0.6', 'tableauserverclient>=0.12', 'PyPDF3==1.0.1',
-                      'Pillow==8.1.1', "openpyxl==3.0.4"],
+                      'Pillow==8.2.0', "openpyxl==3.0.4"],
     python_requires='>=3.7',
 )
